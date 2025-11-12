@@ -113,14 +113,6 @@ def collect_metrics():
                     consumers = client.xinfo_consumers(stream, group_name)
                     consumer_group_consumers_total_gauge.labels(stream=stream, redis_server=server_label, group=group_name).set(len(consumers))
 
-                    # Get data per consumer
-                    for consumer in consumers:
-                        consumer_name = consumer['name'].decode('utf-8')
-
-                        # Get idle time for each consumer
-                        idle_time = consumer.get('idle', 0)
-                        consumer_idle_time_total_gauge.labels(stream=stream, redis_server=server_label, group=group_name, consumer=consumer_name).set(idle_time / 1000)  # Convert ms to seconds
-
             except redis.RedisError as e:
                 logging.info(f"Error collecting metrics for stream {stream}: {e}")
 
