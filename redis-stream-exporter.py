@@ -64,6 +64,8 @@ consumer_groups_total_gauge = Gauge('redis_stream_consumers_total', 'Total numbe
 consumer_group_pending_messages_total_gauge = Gauge('redis_stream_consumer_group_pending_messages_total', 'Total number of pending messages in Redis Stream consumer group', ['stream', 'redis_server', 'group'])
 consumer_group_consumers_total_gauge = Gauge('redis_stream_consumer_group_consumers_total', 'Total number of consumers in Redis Stream consumer group', ['stream', 'redis_server', 'group'])
 consumer_idle_time_total_gauge = Gauge('redis_stream_consumer_idle_time_seconds_total', 'Idle time of each consumer in Redis Stream consumer group', ['stream', 'redis_server', 'group', 'consumer'])
+consumer_groups_lag_gauge = Gauge('redis_stream_consumer_group_lag', 'Lag for Consumer Group', ['stream', 'redis_server', 'group'])
+consumer_groups_entries_read_gauge = Gauge('redis_stream_consumer_group_entries_read', 'Entries Read for Consumer Group', ['stream', 'redis_server', 'group'])
 
 def get_streams(redis_client):
     streams = []
@@ -96,17 +98,20 @@ def collect_metrics():
                         count = pending_messages
                     consumer_group_pending_messages_total_gauge.labels(stream=stream, redis_server=server_label, group=group_name).set(count)
 
+                    # Get the group info
+                    group_info = client.xinfo_groups(stream)
+
+                    # Get the lag for the consumer group and set prometheus metric
+                    consumer_group_lag = group_info[0]['lag']
+                    consumer_groups_lag_gauge.labels(stream=stream, redis_server=server_label, group=group_name).set(consumer_group_lag)
+
+                    # Get the lag for the consumer group and set prometheus metric
+                    consumer_group_entries_read = group_info[0]['entries-read']
+                    consumer_groups_entries_read_gauge.labels(stream=stream, redis_server=server_label, group=group_name).set(consumer_group_entries_read)
+
                     # Get total number of consumers in the group
                     consumers = client.xinfo_consumers(stream, group_name)
                     consumer_group_consumers_total_gauge.labels(stream=stream, redis_server=server_label, group=group_name).set(len(consumers))
-
-                    # Get data per consumer
-                    for consumer in consumers:
-                        consumer_name = consumer['name'].decode('utf-8')
-
-                        # Get idle time for each consumer
-                        idle_time = consumer.get('idle', 0)
-                        consumer_idle_time_total_gauge.labels(stream=stream, redis_server=server_label, group=group_name, consumer=consumer_name).set(idle_time / 1000)  # Convert ms to seconds
 
             except redis.RedisError as e:
                 logging.info(f"Error collecting metrics for stream {stream}: {e}")
